@@ -1,47 +1,73 @@
-import { useState } from "react";
 import TrainPrecedencePanel from "./TrainPrecedencePanel";
-import ConflictResolutionPanel from "./ConflictResolutionPanel";
+import SelectedTrainPanel from "./SelectedTrainPanel";
+import CSVUpload from "./CSVUpload";
+import { useState } from "react";
+import { useTrains } from "../context/TrainContext";
 
 export default function Dashboard() {
-  const [trains, setTrains] = useState([]);
+  const { trains, setTrains } = useTrains();
   const [selectedTrain, setSelectedTrain] = useState(null);
 
-  const delayedTrains = trains.filter(t => t.delay > 0);
+  const toMin = t => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
 
   const injectDelay = (trainId, delay) => {
-    setTrains(prev =>
-      prev.map(t =>
+    setTrains(prev => {
+      // apply delay
+      const updated = prev.map(t =>
         t.train_id === trainId
           ? { ...t, delay, status: "DELAYED" }
           : t
-      )
-    );
+      );
+
+      const delayedTrain = updated.find(t => t.train_id === trainId);
+      if (!delayedTrain) return updated;
+
+      const clearance = 3;
+      const dStart = toMin(delayedTrain.arrival_time) + delay;
+      const dEnd = dStart + clearance;
+
+      const conflicts = updated.filter(t => {
+        if (t.train_id === delayedTrain.train_id) return false;
+        if (t.block_id !== delayedTrain.block_id) return false;
+        if (t.approach_dir === delayedTrain.approach_dir) return false;
+
+        const tStart = toMin(t.arrival_time);
+        const tEnd = tStart + clearance;
+
+        return dStart < tEnd && tStart < dEnd;
+      });
+
+      return updated.map(t =>
+        conflicts.some(c => c.train_id === t.train_id)
+          ? { ...t, conflict: true }
+          : t
+      );
+    });
   };
 
   return (
     <>
-      {/* KPI CARDS */}
       <div className="card-grid">
         <StatusCard title="Active Trains" value={trains.length} />
-        <StatusCard title="Delayed Trains" value={delayedTrains.length} />
         <StatusCard
-          title="System Status"
-          value={delayedTrains.length > 0 ? "PAUSED" : "RUNNING"}
+          title="Delayed Trains"
+          value={trains.filter(t => t.delay > 0).length}
         />
       </div>
 
+      <CSVUpload setTrains={setTrains} />
+
       <div className="dashboard-grid">
-        {/* MAIN PRECEDENCE */}
         <TrainPrecedencePanel
           trains={trains}
-          setTrains={setTrains}
           onSelect={setSelectedTrain}
         />
 
-        {/* CONFLICT RESOLUTION */}
-        <ConflictResolutionPanel
-          delayedTrains={delayedTrains}
-          selectedTrain={selectedTrain}
+        <SelectedTrainPanel
+          train={selectedTrain}
           onInjectDelay={injectDelay}
         />
       </div>

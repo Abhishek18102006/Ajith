@@ -1,13 +1,16 @@
 # Node
 node_modules/
-npm-debug.log*
+dist/
+.vite/
 
 # Python
 __pycache__/
 *.pyc
-
-# OS
-.DS_Store
+*.pkl
 
 # Environment
 .env
+
+# OS
+.DS_Store
+Thumbs.db

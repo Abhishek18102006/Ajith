@@ -1,21 +1,26 @@
-export default function Sidebar({ setPage }) {
+import { NavLink } from "react-router-dom";
+
+export default function Sidebar({ delayedCount = 0 }) {
   return (
     <div className="sidebar">
       <div className="sidebar-title">RailFlow Optimizer</div>
 
-      <Nav label="Dashboard" onClick={() => setPage("dashboard")} />
-      <Nav label="Real-Time Scheduling" onClick={() => setPage("realtime")} />
-      <Nav label="Conflict Resolution" onClick={() => setPage("conflicts")} />
-      <Nav label="What-If Scenario" onClick={() => setPage("whatif")} />
-      <Nav label="Performance" onClick={() => setPage("performance")} />
-    </div>
-  );
-}
+      <div className="sidebar-nav">
+        <NavLink to="/" className="sidebar-link">
+          Dashboard
+        </NavLink>
 
-function Nav({ label, onClick }) {
-  return (
-    <div className="sidebar-item" onClick={onClick}>
-      {label}
+        <NavLink to="/conflicts" className="sidebar-link">
+          Conflict Resolution
+          {delayedCount > 0 && (
+            <span className="sidebar-badge">{delayedCount}</span>
+          )}
+        </NavLink>
+
+        <NavLink to="#" className="sidebar-link">Real-Time Scheduling</NavLink>
+        <NavLink to="#" className="sidebar-link">What-If Scenario</NavLink>
+        <NavLink to="#" className="sidebar-link">Performance</NavLink>
+      </div>
     </div>
   );
 }
