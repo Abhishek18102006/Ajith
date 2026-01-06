@@ -1,8 +1,10 @@
-import { BrowserRouter } from "react-router-dom";
-import { TrainProvider } from "./context/TrainContext";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./styles.css";
 
-<BrowserRouter>
-  <TrainProvider>
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
     <App />
-  </TrainProvider>
-</BrowserRouter>
+  </React.StrictMode>
+);

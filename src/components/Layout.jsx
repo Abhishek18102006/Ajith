@@ -1,14 +1,13 @@
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-export default function Layout({ children }) {
+export default function Layout({ children, setPage }) {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-
+      <Sidebar setPage={setPage} />
       <div style={{ flex: 1 }}>
         <Header />
-        {children} {/* ✅ ALWAYS RENDERS */}
+        {children}
       </div>
     </div>
   );

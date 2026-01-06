@@ -1,31 +1,29 @@
 import { parseTrainCSV } from "../utils/parseTrainCSV";
 
-export default function CSVUpload({ setTrains }) {
-  const handleFileUpload = e => {
+export default function CSVUpload({ onLoad }) {
+  const handleFile = e => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = event => {
-      const parsed = parseTrainCSV(event.target.result);
+    reader.onload = () => {
+      const trains = parseTrainCSV(reader.result);
 
-      const initialized = parsed.map(t => ({
-        ...t,
-        delay: 0,
-        conflict: false,
-        status: "ON_TIME"
-      }));
+      // ✅ Sort by arrival time (precedence)
+      trains.sort((a, b) =>
+        a.arrival_time.localeCompare(b.arrival_time)
+      );
 
-      setTrains(initialized);
+      onLoad(trains);
     };
-
     reader.readAsText(file);
   };
 
   return (
-    <div className="table-card">
-      <h4>Upload Train Schedule</h4>
-      <input type="file" accept=".csv,.txt" onChange={handleFileUpload} />
-    </div>
+    <input
+      type="file"
+      accept=".csv"
+      onChange={handleFile}
+    />
   );
 }

@@ -1,26 +1,22 @@
 import { useState } from "react";
-import { Routes, Route } from "react-router-dom";
-
 import Login from "./pages/Login";
 import Dashboard from "./components/Dashboard";
-import ConflictResolution from "./pages/ConflictResolution";
 import Layout from "./components/Layout";
+import Conflicts from "./components/Conflicts";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [trains, setTrains] = useState([]);
+  const [page, setPage] = useState("dashboard");
 
-  // 🔒 LOGIN GUARD (UNCHANGED)
-  if (!user) {
-    return <Login onLogin={setUser} />;
-  }
+  if (!user) return <Login onLogin={setUser} />;
 
-  // ✅ ROUTED APP AFTER LOGIN
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard user={user} />} />
-        <Route path="/conflicts" element={<ConflictResolution />} />
-      </Routes>
+    <Layout setPage={setPage}>
+      {page === "dashboard" && (
+        <Dashboard trains={trains} setTrains={setTrains} />
+      )}
+      {page === "conflicts" && <Conflicts trains={trains} />}
     </Layout>
   );
 }

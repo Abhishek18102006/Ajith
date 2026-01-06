@@ -1,28 +1,34 @@
-export default function parseTrainCSV(text) {
+export function parseTrainCSV(text) {
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",");
 
-  return lines.slice(1).map((line) => {
-    const values = line.split(",");
+  return lines.slice(1).map(row => {
+    const values = row.split(",");
+    const data = {};
 
-    const row = {};
     headers.forEach((h, i) => {
-      row[h.trim()] = values[i]?.trim();
+      data[h.trim()] = values[i]?.trim() || "";
     });
 
     return {
-      train_id: Number(row.train_id),
-      train_name: row.train_name,
-      source: row.source,
-      destination: row.destination,
-      arrival_time: row.arrival_time,
-      departure_time: row.departure_time,
-      train_type: row.train_type,
-      priority: Number(row.priority),
-      max_speed: Number(row.max_speed),
-      delay: 0,              // 🔥 REQUIRED
-      status: "ON_TIME",     // 🔥 REQUIRED
-      conflict: false        // 🔥 REQUIRED
+      train_id: data.train_id,
+      train_name: data.train_name,
+      source: data.source,
+      destination: data.destination,
+      arrival_time: data.arrival_time,
+
+      priority: Number(data.priority),
+      max_speed: Number(data.max_speed),
+
+      // 🔥 REQUIRED FOR CONFLICT + AI
+      block_id: data.block_id,
+      approach_dir: data.approach_dir,
+      line: data.line,
+      clearance_min: Number(data.clearance_min || 3),
+
+      // runtime state
+      delay: 0,
+      status: "ON TIME"
     };
   });
 }
