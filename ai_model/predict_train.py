@@ -2,12 +2,20 @@ import sys
 import json
 import pandas as pd
 import joblib
+import os
+
+# ==============================
+# FIX PATHS
+# ==============================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(BASE_DIR, "model.pkl")
+csv_path = os.path.join(BASE_DIR, "daily_schedule.csv")
 
 # ==============================
 # LOAD MODEL AND DATA
 # ==============================
-model = joblib.load("model.pkl")
-df = pd.read_csv("daily_schedule.csv")
+model = joblib.load(model_path)
+df = pd.read_csv(csv_path)
 
 # ==============================
 # PREDICTION FUNCTION
@@ -46,9 +54,10 @@ def predict_conflict(data):
         }
 
 # ==============================
-# ENTRY POINT FOR NODE
+# ENTRY POINT (STDIN BASED)
 # ==============================
 if __name__ == "__main__":
-    input_data = json.loads(sys.argv[1])
-    result = predict_conflict(input_data)
+    raw_input = sys.stdin.read()
+    data = json.loads(raw_input)
+    result = predict_conflict(data)
     print(json.dumps(result))
