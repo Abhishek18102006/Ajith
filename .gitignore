@@ -14,13 +14,4 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
-# Ignore AI generated / runtime files
-ai_model/*.pkl
-ai_model/*.json
-ai_model/*.csv
-ai_model/*.py
-
-# Allow only required files
-!ai_model/ml_training_data.csv
-!ai_model/predict_train.py
-!ai_model/train_model.py
+ai_model/ml_training_data.csv

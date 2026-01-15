@@ -1,0 +1,11 @@
+train_id,train_name,source,destination,passengers,distance_km,travel_time_hr,train_capacity,is_peak_hour,delay_risk
+101,Chennai Express,Chennai,Bangalore,780,350,5.5,1000,1,1
+102,Coimbatore Intercity,Coimbatore,Chennai,420,495,7.2,900,0,0
+103,Madurai Superfast,Madurai,Chennai,910,460,6.8,1000,1,1
+104,Trichy Passenger,Trichy,Salem,280,140,3.0,800,0,0
+105,Kovai Express,Coimbatore,Bangalore,860,365,5.8,1000,1,1
+106,Pandian Express,Chennai,Madurai,740,480,7.5,1000,0,0
+107,Nilgiri Express,Coimbatore,Chennai,890,495,7.0,1000,1,1
+108,Salem Fast Passenger,Salem,Erode,310,64,1.5,700,0,0
+109,Kanyakumari Express,Kanyakumari,Chennai,950,705,11.0,1000,1,1
+110,Vellore MEMU,Vellore,Chennai,260,140,2.8,600,0,0
