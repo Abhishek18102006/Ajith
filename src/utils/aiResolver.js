@@ -1,39 +1,54 @@
 // src/utils/aiResolver.js
 
-export async function resolveConflictAI(conflict, trains) {
+export async function resolveConflictAI(conflict) {
   try {
     console.log("🔍 Conflict received:", conflict);
     
-    // Extract train data based on conflict structure
-    let priorityTrain, affectedTrain;
+    // Extract train IDs from conflict
+    let trainA, trainB;
     
-    if (conflict.priority && conflict.affected) {
-      priorityTrain = conflict.priority;
-      affectedTrain = conflict.affected;
-    } else if (conflict.trainA && conflict.trainB) {
-      priorityTrain = trains.find(t => t.train_id === conflict.trainA);
-      affectedTrain = trains.find(t => t.train_id === conflict.trainB);
+    if (conflict.trainA && conflict.trainB) {
+      trainA = conflict.trainA;
+      trainB = conflict.trainB;
     } else if (conflict.leadingTrain && conflict.followingTrain) {
-      priorityTrain = trains.find(t => t.train_id === conflict.leadingTrain);
-      affectedTrain = trains.find(t => t.train_id === conflict.followingTrain);
+      trainA = conflict.leadingTrain;
+      trainB = conflict.followingTrain;
     } else {
       throw new Error("Unknown conflict structure");
     }
 
-    if (!priorityTrain || !affectedTrain) {
-      throw new Error("Could not find train data for conflict");
-    }
+    // Get train objects from conflict - they should be embedded in the conflict object
+    const trainAObj = conflict.trainAObj || conflict.priority || {};
+    const trainBObj = conflict.trainBObj || conflict.affected || {};
 
-    // Build payload with all required fields + defaults
+    // Build payload with all required fields + detailed train data for priority comparison
     const payload = {
-      priority_train: priorityTrain.train_id || priorityTrain,
-      affected_train: affectedTrain.train_id || affectedTrain,
-      passengers: Number(affectedTrain.passengers) || 600,
-      distance_km: Number(affectedTrain.distance_km) || 300,
-      travel_time_hr: Number(affectedTrain.travel_time_hr) || 5.0,
-      train_capacity: Number(affectedTrain.train_capacity) || 800,
-      is_peak_hour: Number(affectedTrain.is_peak_hour) || 0
-      // NO delay field needed!
+      priority_train: trainA,
+      affected_train: trainB,
+      
+      // Priority levels
+      priority_train_level: Number(trainAObj.priority) || 1,
+      affected_train_level: Number(trainBObj.priority) || 1,
+      
+      // Priority train detailed data
+      priority_train_passengers: Number(trainAObj.passengers) || 600,
+      priority_train_distance: Number(trainAObj.distance_km) || 300,
+      priority_train_travel_time: Number(trainAObj.travel_time_hr) || 5.0,
+      priority_train_capacity: Number(trainAObj.train_capacity) || 800,
+      
+      // Affected train detailed data
+      affected_train_passengers: Number(trainBObj.passengers) || 600,
+      affected_train_distance: Number(trainBObj.distance_km) || 300,
+      affected_train_travel_time: Number(trainBObj.travel_time_hr) || 5.0,
+      affected_train_capacity: Number(trainBObj.train_capacity) || 800,
+      
+      // Default fields (for backwards compatibility)
+      passengers: Number(trainAObj.passengers || trainBObj.passengers || 600),
+      distance_km: Number(trainAObj.distance_km || trainBObj.distance_km || 300),
+      travel_time_hr: Number(trainAObj.travel_time_hr || trainBObj.travel_time_hr || 5.0),
+      train_capacity: Number(trainAObj.train_capacity || trainBObj.train_capacity || 800),
+      is_peak_hour: Number(trainAObj.is_peak_hour || trainBObj.is_peak_hour || 0),
+      delay: Number(trainAObj.delay || trainBObj.delay || 0)
     };
 
     console.log("📤 Sending to AI:", payload);
@@ -45,8 +60,13 @@ export async function resolveConflictAI(conflict, trains) {
     });
 
     if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.error || `HTTP ${res.status}`);
+      const errorText = await res.text();
+      console.error("❌ AI request failed:", {
+        status: res.status,
+        statusText: res.statusText,
+        body: errorText
+      });
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
     }
 
     const data = await res.json();
@@ -56,15 +76,30 @@ export async function resolveConflictAI(conflict, trains) {
       throw new Error(data.error || "AI returned unsuccessful response");
     }
 
-    return data;
+    // Normalize response format
+    return {
+      success: true,
+      priority_train: data.priority_train,
+      reduced_train: data.reduced_train,
+      suggested_speed: data.suggested_speed || 60,
+      reason: data.reason || "AI-based conflict resolution",
+      confidence: data.confidence || 75,
+      decision: data.decision || "REDUCE_SPEED"
+    };
 
   } catch (err) {
     console.error("❌ AI RESOLUTION FAILED:", err);
+    
+    // Return fallback decision instead of failing completely
     return {
       success: false,
       error: err.message,
+      priority_train: conflict.trainA || conflict.leadingTrain,
+      reduced_train: conflict.trainB || conflict.followingTrain,
+      suggested_speed: 60,
       decision: "MANUAL_INTERVENTION",
-      reason: "AI resolution failed, manual intervention required"
+      reason: `AI resolution failed: ${err.message}. Manual intervention required.`,
+      confidence: 0
     };
   }
 }

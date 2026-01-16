@@ -12,35 +12,94 @@ export default function Dashboard({ trains, setTrains }) {
   const [selectedTrain, setSelectedTrain] = useState(null);
 
   /* ============================
-     DELAY INJECTION
+     ⭐ CORRECTED DELAY INJECTION
+     Preserves original schedule, applies delay
      ============================ */
-  function injectDelay(trainId, delay) {
+  function injectDelay(trainId, delayMinutes) {
+    const delayAmount = Number(delayMinutes);
+    
+    if (isNaN(delayAmount)) {
+      console.error("Invalid delay amount:", delayMinutes);
+      return;
+    }
+    
+    console.log(`📥 Injecting delay: ${delayAmount} min to train ${trainId}`);
+    
     setTrains(prev =>
-      prev.map(t =>
-        t.train_id === trainId
-          ? {
-              ...t,
-              delay: Number(delay) || 0,
-              status: "IN_CONFLICT",
-              conflict_reason: "Departure delay"
-            }
-          : t
-      )
+      prev.map(t => {
+        if (t.train_id !== trainId) return t;
+        
+        // ⭐ IMPORTANT: Use the ORIGINAL scheduled time, not current arrival_time
+        // Store original time on first delay injection
+        const originalScheduledTime = t.original_arrival_time || t.arrival_time;
+        
+        // Parse original scheduled time
+        const [hours, minutes] = originalScheduledTime.split(":").map(Number);
+        const scheduledMinutes = hours * 60 + minutes;
+        
+        // Calculate effective arrival = scheduled + delay
+        let effectiveMinutes = scheduledMinutes + delayAmount;
+        
+        // Handle day wrap-around
+        if (effectiveMinutes < 0) {
+          effectiveMinutes = 1440 + effectiveMinutes;
+        }
+        effectiveMinutes = effectiveMinutes % 1440;
+        
+        const effectiveHour = Math.floor(effectiveMinutes / 60);
+        const effectiveMinute = effectiveMinutes % 60;
+        
+        // ⭐ REASSIGN BLOCK BASED ON EFFECTIVE TIME
+        let newBlockId;
+        if (effectiveHour >= 5 && effectiveHour < 8) {
+          newBlockId = "BLK_MORNING";
+        } else if (effectiveHour >= 8 && effectiveHour < 10) {
+          newBlockId = "BLK_RUSH";
+        } else if (effectiveHour >= 10 && effectiveHour < 12) {
+          newBlockId = "BLK_MIDDAY";
+        } else {
+          newBlockId = t.block_id;
+        }
+        
+        console.log(`🔄 Train ${trainId} delay applied:`, {
+          scheduledTime: originalScheduledTime,
+          delayAmount: delayAmount,
+          effectiveMinutes: effectiveMinutes,
+          effectiveTime: `${String(effectiveHour).padStart(2, '0')}:${String(effectiveMinute).padStart(2, '0')}`,
+          oldBlock: t.block_id,
+          newBlock: newBlockId
+        });
+        
+        // ⭐ RETURN UPDATED TRAIN WITH PRESERVED SCHEDULE
+        return {
+          ...t,
+          original_arrival_time: originalScheduledTime, // ⭐ Preserve original
+          arrival_time: originalScheduledTime,          // ⭐ Keep showing scheduled time
+          delay: delayAmount,                           // ⭐ Store delay
+          arrival: effectiveMinutes,                    // ⭐ Effective time for conflict detection
+          block_id: newBlockId,
+          current_block: newBlockId,
+          status: delayAmount !== 0 ? "DELAYED" : "ON TIME",
+          conflict_reason: delayAmount !== 0 ? `${delayAmount > 0 ? '+' : ''}${delayAmount} min adjustment` : null
+        };
+      })
     );
   }
 
   /* ============================
-     ACCEPT AI RESOLUTION
+     ⭐ ACCEPT AI RESOLUTION
      ============================ */
   function handleAcceptResolution(trainId) {
+    console.log(`✅ Accepting AI resolution for train ${trainId}`);
+    
     setTrains(prev =>
       prev.map(t =>
         t.train_id === trainId
           ? {
               ...t,
-              delay: 0,
-              status: "ON TIME",
-              conflict_reason: null
+              status: "RESOLVED",
+              conflict: false,
+              conflict_reason: "AI resolution applied"
             }
           : t
       )
@@ -48,15 +107,19 @@ export default function Dashboard({ trains, setTrains }) {
   }
 
   /* ============================
-     REJECT AI RESOLUTION
+     ⭐ REJECT AI RESOLUTION
      ============================ */
   function handleRejectResolution(trainId) {
+    console.log(`❌ Rejecting AI resolution for train ${trainId}`);
+    
     setTrains(prev =>
       prev.map(t =>
         t.train_id === trainId
           ? {
               ...t,
-              status: "DELAYED"
+              status: "MANUAL_REVIEW",
+              conflict: true,
+              conflict_reason: "AI resolution rejected - requires manual intervention"
             }
           : t
       )
@@ -64,9 +127,11 @@ export default function Dashboard({ trains, setTrains }) {
   }
 
   /* ============================
-     CLEAR TRAIN (SECTION EXIT)
+     ⭐ CLEAR TRAIN (SECTION EXIT)
      ============================ */
   function handleClearTrain(trainId) {
+    console.log(`🚂 Clearing train ${trainId} from section`);
+    
     setTrains(prev =>
       prev.filter(t => t.train_id !== trainId)
     );
@@ -80,6 +145,7 @@ export default function Dashboard({ trains, setTrains }) {
      DERIVED DATA
      ============================ */
   const activeTrains = trains.filter(t => t.status !== "CLEARED");
+  const conflictedTrains = activeTrains.filter(t => t.conflict || t.status === "IN_CONFLICT" || t.status === "DELAYED");
 
   return (
     <>
@@ -91,15 +157,16 @@ export default function Dashboard({ trains, setTrains }) {
         <StatusCard title="Active Trains" value={activeTrains.length} />
         <StatusCard
           title="Conflicts"
-          value={activeTrains.filter(t => t.status === "IN_CONFLICT").length}
+          value={conflictedTrains.length}
         />
         <StatusCard
           title="System Status"
           value={
-            activeTrains.some(t => t.status === "IN_CONFLICT")
-              ? "PAUSED"
-              : "RUNNING"
+            conflictedTrains.length > 0
+              ? "CONFLICT"
+              : "NORMAL"
           }
+          color={conflictedTrains.length > 0 ? "#dc2626" : "#16a34a"}
         />
       </div>
 
@@ -136,11 +203,13 @@ export default function Dashboard({ trains, setTrains }) {
 /* ============================
    STATUS CARD
    ============================ */
-function StatusCard({ title, value }) {
+function StatusCard({ title, value, color }) {
   return (
     <div className="card">
       <h4>{title}</h4>
-      <p className="card-value">{value}</p>
+      <p className="card-value" style={{ color: color || "#0a2540" }}>
+        {value}
+      </p>
     </div>
   );
 }

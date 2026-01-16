@@ -1,8 +1,7 @@
-import { timeToMinutes, effectiveArrival } from "../utils/time";
+import { timeToMinutes, effectiveArrival, minutesToTime } from "../utils/time";
 
 /**
  * Debug Panel to visualize conflict detection
- * Add this to Dashboard to see what's happening
  */
 export function ConflictDebugPanel({ trains }) {
   if (!trains || trains.length === 0) return null;
@@ -72,10 +71,10 @@ export function ConflictDebugPanel({ trains }) {
                 {trainsInBlock
                   .sort((a, b) => effectiveArrival(a) - effectiveArrival(b))
                   .map((train, idx, arr) => {
-                    const effective = effectiveArrival(train);
+                    const effective = train.arrival || effectiveArrival(train);
                     const nextTrain = arr[idx + 1];
                     const gap = nextTrain 
-                      ? effectiveArrival(nextTrain) - effective 
+                      ? (nextTrain.arrival || effectiveArrival(nextTrain)) - effective 
                       : null;
                     
                     const isConflict = gap !== null && gap <= 3;
@@ -104,13 +103,13 @@ export function ConflictDebugPanel({ trains }) {
                         <td style={{ padding: "4px" }}>{train.arrival_time}</td>
                         <td style={{ 
                           padding: "4px",
-                          color: train.delay > 0 ? "#dc2626" : "#16a34a",
-                          fontWeight: train.delay > 0 ? "600" : "normal"
+                          color: train.delay > 0 ? "#dc2626" : train.delay < 0 ? "#2563eb" : "#16a34a",
+                          fontWeight: train.delay !== 0 ? "600" : "normal"
                         }}>
-                          {train.delay > 0 ? `+${train.delay}` : "0"} min
+                          {train.delay > 0 ? `+${train.delay}` : train.delay || 0} min
                         </td>
                         <td style={{ padding: "4px", fontWeight: "500" }}>
-                          {formatMinutesToTime(effective)}
+                          {minutesToTime(effective)}
                         </td>
                         <td style={{ 
                           padding: "4px",
@@ -118,7 +117,7 @@ export function ConflictDebugPanel({ trains }) {
                           fontWeight: isConflict ? "600" : "normal"
                         }}>
                           {gap !== null ? (
-                            isConflict ? `⚠ ${gap} min` : `${gap} min`
+                            isConflict ? `⚠ ${Math.round(gap)} min` : `${Math.round(gap)} min`
                           ) : "-"}
                         </td>
                       </tr>
@@ -127,7 +126,6 @@ export function ConflictDebugPanel({ trains }) {
               </tbody>
             </table>
 
-            {/* Conflict Detection Logic */}
             {trainsInBlock.length >= 2 && (
               <div style={{ 
                 marginTop: "8px",
@@ -142,7 +140,7 @@ export function ConflictDebugPanel({ trains }) {
                     <strong>Same Block (Opposite Dir):</strong> Time gap ≤ 3 min
                   </li>
                   <li>
-                    <strong>Loop Line (Same Dir):</strong> Leading train delayed + following within 3 min
+                    <strong>Loop Line (Same Dir):</strong> Time gap &lt; 5 min
                   </li>
                 </ul>
               </div>
@@ -152,11 +150,4 @@ export function ConflictDebugPanel({ trains }) {
       </div>
     </details>
   );
-}
-
-// Helper to format minutes back to HH:MM
-function formatMinutesToTime(minutes) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }

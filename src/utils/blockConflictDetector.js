@@ -7,7 +7,6 @@ import { effectiveArrival } from "./time";
 export function detectBlockConflicts(trains) {
   const conflicts = [];
 
-  // Validate input
   if (!Array.isArray(trains) || trains.length === 0) {
     return conflicts;
   }
@@ -17,7 +16,6 @@ export function detectBlockConflicts(trains) {
       const a = trains[i];
       const b = trains[j];
 
-      // Defensive checks for required fields
       if (!isValidTrain(a) || !isValidTrain(b)) {
         console.warn("Skipping invalid train in conflict detection", { a, b });
         continue;
@@ -29,16 +27,27 @@ export function detectBlockConflicts(trains) {
       // Check if approaching from opposite directions
       if (a.approach_dir === b.approach_dir) continue;
 
-      // Calculate effective arrival times
-      const ta = effectiveArrival(a);
-      const tb = effectiveArrival(b);
+      // ⭐ Calculate effective arrival times (uses 'arrival' field or calculates)
+      const ta = a.arrival || effectiveArrival(a);
+      const tb = b.arrival || effectiveArrival(b);
       const clearance = Number(a.clearance_min) || 3;
 
-      // Check if time gap is within danger zone
       const timeDiff = Math.abs(ta - tb);
       
+      console.log(`🔍 Checking conflict between Train ${a.train_id} and ${b.train_id}:`, {
+        block: a.block_id,
+        trainA_scheduled: a.arrival_time,
+        trainA_delay: a.delay,
+        trainA_effective: ta,
+        trainB_scheduled: b.arrival_time,
+        trainB_delay: b.delay,
+        trainB_effective: tb,
+        timeDiff: timeDiff,
+        clearance: clearance,
+        isConflict: timeDiff <= clearance
+      });
+      
       if (timeDiff <= clearance) {
-        // Determine severity
         const severity = getSeverity(timeDiff, clearance);
         
         conflicts.push({
@@ -46,7 +55,7 @@ export function detectBlockConflicts(trains) {
           block_id: a.block_id,
           trainA: a.train_id,
           trainB: b.train_id,
-          timeDiff: timeDiff,
+          timeDiff: Math.round(timeDiff),
           severity: severity,
           trainAObj: a,
           trainBObj: b,
@@ -69,8 +78,7 @@ function isValidTrain(train) {
     'train_id',
     'arrival_time',
     'block_id',
-    'approach_dir',
-    'delay'
+    'approach_dir'
   ];
   
   for (const field of requiredFields) {
@@ -90,11 +98,11 @@ function getSeverity(timeDiff, clearance) {
   const ratio = timeDiff / clearance;
   
   if (ratio < 0.33) {
-    return "CRITICAL";  // Less than 1 minute
+    return "CRITICAL";
   } else if (ratio < 0.67) {
-    return "HIGH";      // 1-2 minutes
+    return "HIGH";
   } else {
-    return "MEDIUM";    // 2-3 minutes
+    return "MEDIUM";
   }
 }
 
@@ -103,10 +111,10 @@ function getSeverity(timeDiff, clearance) {
  */
 export function getSeverityColor(severity) {
   const colors = {
-    CRITICAL: "#dc2626",  // Red
-    HIGH: "#ea580c",      // Orange-red
-    MEDIUM: "#d97706",    // Orange
-    LOW: "#16a34a"        // Green
+    CRITICAL: "#dc2626",
+    HIGH: "#ea580c",
+    MEDIUM: "#d97706",
+    LOW: "#16a34a"
   };
   return colors[severity] || "#64748b";
 }
