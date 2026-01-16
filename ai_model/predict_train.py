@@ -120,12 +120,42 @@ def main():
             if field not in data:
                 raise ValueError(f"Missing required field: {field}")
         
-        # Check if we need priority-based decision
+        # Get priority levels
         priority_train_level = data.get("priority_train_level", None)
         affected_train_level = data.get("affected_train_level", None)
         
-        # If both trains have same priority, use advanced scoring
+        print(f"🔍 Priority levels: priority_train={priority_train_level}, affected_train={affected_train_level}", file=sys.stderr)
+        
+        # ⭐ FIX: Check if priority train actually has HIGHER priority number
         if priority_train_level is not None and affected_train_level is not None:
+            # HIGHER number = HIGHER priority (3 > 2)
+            if priority_train_level < affected_train_level:
+                # Swap! The "affected" train actually has higher priority
+                print("🔄 SWAPPING: Affected train has higher priority number!", file=sys.stderr)
+                
+                # Swap the train IDs
+                original_priority = data["priority_train"]
+                original_affected = data["affected_train"]
+                
+                data["priority_train"] = original_affected
+                data["affected_train"] = original_priority
+                
+                # Swap priority levels
+                priority_train_level, affected_train_level = affected_train_level, priority_train_level
+                data["priority_train_level"] = priority_train_level
+                data["affected_train_level"] = affected_train_level
+                
+                # Swap all train-specific data
+                priority_fields = ["passengers", "distance", "travel_time", "capacity"]
+                for field in priority_fields:
+                    priority_key = f"priority_train_{field}"
+                    affected_key = f"affected_train_{field}"
+                    if priority_key in data and affected_key in data:
+                        data[priority_key], data[affected_key] = data[affected_key], data[priority_key]
+                
+                print(f"✅ Swapped: priority_train={data['priority_train']}, affected_train={data['affected_train']}", file=sys.stderr)
+            
+            # If same priority, use advanced scoring
             if priority_train_level == affected_train_level:
                 print("⚖️ Same priority detected - using passenger/distance analysis", file=sys.stderr)
                 
@@ -210,14 +240,14 @@ def main():
             priority_train = data["priority_train"]
             reduced_train = data["affected_train"]
             suggested_speed = 60
-            reason = "ML model predicts low delay risk - reduce speed to maintain safe separation"
+            reason = f"Priority train {priority_train} (level {priority_train_level}) has precedence over train {reduced_train} (level {affected_train_level}). ML model predicts low delay risk - reduce speed to maintain safe separation"
         else:
             # High delay risk - hold the affected train
             decision = "HOLD_TRAIN"
             priority_train = data["priority_train"]
             reduced_train = data["affected_train"]
             suggested_speed = 0
-            reason = "ML model predicts high delay risk - hold train to prevent conflict escalation"
+            reason = f"Priority train {priority_train} (level {priority_train_level}) has precedence over train {reduced_train} (level {affected_train_level}). ML model predicts high delay risk - hold train to prevent conflict escalation"
         
         # Build final result
         result = {

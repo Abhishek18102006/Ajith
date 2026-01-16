@@ -4,22 +4,38 @@ export async function resolveConflictAI(conflict) {
   try {
     console.log("🔍 Conflict received:", conflict);
     
-    // Extract train IDs from conflict
-    let trainA, trainB;
+    // Extract train IDs from different conflict types
+    let trainA, trainB, trainAObj, trainBObj;
     
+    // Handle different conflict structures
     if (conflict.trainA && conflict.trainB) {
+      // Same block conflicts
       trainA = conflict.trainA;
       trainB = conflict.trainB;
+      trainAObj = conflict.trainAObj;
+      trainBObj = conflict.trainBObj;
     } else if (conflict.leadingTrain && conflict.followingTrain) {
+      // Loop line conflicts
       trainA = conflict.leadingTrain;
       trainB = conflict.followingTrain;
+      trainAObj = conflict.leadingTrainObj;
+      trainBObj = conflict.followingTrainObj;
+    } else if (conflict.train1 && conflict.train2) {
+      // Junction conflicts
+      trainA = conflict.train1;
+      trainB = conflict.train2;
+      trainAObj = conflict.train1Obj;
+      trainBObj = conflict.train2Obj;
     } else {
-      throw new Error("Unknown conflict structure");
+      console.error("❌ Unknown conflict structure:", conflict);
+      throw new Error("Unknown conflict structure - missing train identifiers");
     }
 
-    // Get train objects from conflict - they should be embedded in the conflict object
-    const trainAObj = conflict.trainAObj || conflict.priority || {};
-    const trainBObj = conflict.trainBObj || conflict.affected || {};
+    // Validate we have train objects
+    if (!trainAObj || !trainBObj) {
+      console.error("❌ Missing train objects:", { trainAObj, trainBObj });
+      throw new Error("Missing train data objects");
+    }
 
     // Build payload with all required fields + detailed train data for priority comparison
     const payload = {
@@ -84,7 +100,9 @@ export async function resolveConflictAI(conflict) {
       suggested_speed: data.suggested_speed || 60,
       reason: data.reason || "AI-based conflict resolution",
       confidence: data.confidence || 75,
-      decision: data.decision || "REDUCE_SPEED"
+      decision: data.decision || "REDUCE_SPEED",
+      probabilities: data.probabilities,
+      priority_analysis: data.priority_analysis
     };
 
   } catch (err) {
@@ -94,8 +112,8 @@ export async function resolveConflictAI(conflict) {
     return {
       success: false,
       error: err.message,
-      priority_train: conflict.trainA || conflict.leadingTrain,
-      reduced_train: conflict.trainB || conflict.followingTrain,
+      priority_train: conflict.trainA || conflict.leadingTrain || conflict.train1,
+      reduced_train: conflict.trainB || conflict.followingTrain || conflict.train2,
       suggested_speed: 60,
       decision: "MANUAL_INTERVENTION",
       reason: `AI resolution failed: ${err.message}. Manual intervention required.`,

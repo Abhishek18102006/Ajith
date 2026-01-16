@@ -39,13 +39,18 @@ export function parseTrainCSV(text) {
       // Train classification
       train_type: data.train_type || getPriorityLabel(Number(data.priority) || 2),
       priority: Number(data.priority) || 2,
-      max_speed: Number(data.max_speed) || 90,
+      max_speed: Number(data.max_speed) || 80, // Default speed if not provided
       
       // ⭐ CONFLICT DETECTION FIELDS - Use CSV values (unique blocks)
       block_id: data.block_id || `BLK_${data.train_id}`,
       approach_dir: data.approach_dir || "UP",
       line: data.line || ((Number(data.priority) || 2) <= 2 ? "LOOP" : "MAIN"),
       clearance_min: Number(data.clearance_min) || 3,
+      
+      // Junction fields
+      next_junction: data.next_junction || null,
+      distance_to_junction: Number(data.distance_to_junction) || 0,
+      junction_clearance_min: Number(data.junction_clearance_min) || 5,
       
       // Navigation state
       current_block: data.block_id || `BLK_${data.train_id}`,

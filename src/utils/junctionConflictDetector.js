@@ -11,8 +11,11 @@ export function detectJunctionConflicts(trains) {
 
   // Validate input
   if (!Array.isArray(trains) || trains.length === 0) {
+    console.log("🔍 Junction detector: No trains provided");
     return conflicts;
   }
+
+  console.log(`🔍 Junction detector: Processing ${trains.length} trains`);
 
   // Group trains by their next junction
   const byJunction = {};
@@ -20,7 +23,12 @@ export function detectJunctionConflicts(trains) {
   trains.forEach(train => {
     const junction = train.next_junction || train.next_block;
     
-    if (!junction || junction === "null" || junction === "") return;
+    console.log(`🔍 Train ${train.train_id}: junction=${junction}, distance_to_junction=${train.distance_to_junction}, max_speed=${train.max_speed}`);
+    
+    if (!junction || junction === "null" || junction === "") {
+      console.log(`  ⚠ Skipping train ${train.train_id} - no junction`);
+      return;
+    }
 
     if (!byJunction[junction]) {
       byJunction[junction] = [];
@@ -28,14 +36,22 @@ export function detectJunctionConflicts(trains) {
     byJunction[junction].push(train);
   });
 
+  console.log(`🔍 Junctions found:`, Object.keys(byJunction));
+
   // Check each junction for conflicts
   Object.entries(byJunction).forEach(([junctionId, trainsAtJunction]) => {
-    if (trainsAtJunction.length < 2) return;
+    console.log(`\n🔍 Checking junction ${junctionId} with ${trainsAtJunction.length} trains`);
+    
+    if (trainsAtJunction.length < 2) {
+      console.log(`  ℹ Only ${trainsAtJunction.length} train(s) - no conflict possible`);
+      return;
+    }
 
     // Sort by effective arrival time at junction
     const sorted = trainsAtJunction.sort((a, b) => {
       const timeA = calculateJunctionArrival(a);
       const timeB = calculateJunctionArrival(b);
+      console.log(`  📊 Train ${a.train_id} arrival: ${timeA.toFixed(2)} min, Train ${b.train_id} arrival: ${timeB.toFixed(2)} min`);
       return timeA - timeB;
     });
 
@@ -51,8 +67,12 @@ export function detectJunctionConflicts(trains) {
       // Junction clearance time (default 5 minutes for safety)
       const clearanceTime = Number(train1.junction_clearance_min) || 5;
 
+      console.log(`  ⏱ Gap between ${train1.train_id} and ${train2.train_id}: ${gap.toFixed(2)} min (needs ${clearanceTime} min)`);
+
       if (gap <= clearanceTime) {
         const severity = getJunctionSeverity(gap, clearanceTime);
+        
+        console.log(`  ⚠ CONFLICT DETECTED! Severity: ${severity}`);
         
         conflicts.push({
           type: "JUNCTION",
@@ -72,6 +92,7 @@ export function detectJunctionConflicts(trains) {
     }
   });
 
+  console.log(`\n🔍 Junction conflicts found: ${conflicts.length}`);
   return conflicts;
 }
 
@@ -92,7 +113,19 @@ function calculateJunctionArrival(train) {
     ? (distanceToJunction / currentSpeed) * 60 
     : 0;
   
-  return baseArrival + delay + travelTime;
+  const junctionArrival = baseArrival + delay + travelTime;
+  
+  console.log(`    📍 Train ${train.train_id} junction arrival calc:`, {
+    arrival_time: train.arrival_time,
+    baseArrival,
+    delay,
+    distanceToJunction,
+    currentSpeed,
+    travelTime: travelTime.toFixed(2),
+    junctionArrival: junctionArrival.toFixed(2)
+  });
+  
+  return junctionArrival;
 }
 
 /**
