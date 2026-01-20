@@ -1,4 +1,4 @@
-// src/components/Sidebar.jsx (UPDATED)
+// src/components/Sidebar.jsx (WITHOUT NETWORK LINE VIEW)
 
 export default function Sidebar({ setPage, currentPage }) {
   return (
@@ -19,7 +19,6 @@ export default function Sidebar({ setPage, currentPage }) {
         active={currentPage === "conflicts"}
       />
 
-      {/* ⭐ NEW: History Navigation */}
       <Nav 
         label="History" 
         icon="📜"
@@ -27,7 +26,6 @@ export default function Sidebar({ setPage, currentPage }) {
         active={currentPage === "history"}
       />
 
-      {/* ⭐ NEW: Performance Navigation */}
       <Nav 
         label="Performance" 
         icon="📈"

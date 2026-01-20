@@ -1,4 +1,4 @@
-// src/App.jsx (FIXED - COMPLETE INTEGRATION)
+// src/App.jsx (WITHOUT NETWORK LINE VIEW)
 import { useState, useEffect } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./components/Dashboard";
@@ -12,10 +12,8 @@ function App() {
   const [trains, setTrains] = useState([]);
   const [page, setPage] = useState("dashboard");
   
-  // ⭐ History state
   const [history, setHistory] = useState([]);
   
-  // ⭐ Performance tracking state
   const [performanceData, setPerformanceData] = useState({
     totalConflictsDetected: 0,
     totalConflictsResolved: 0,
@@ -33,7 +31,6 @@ function App() {
     resolutionHistory: []
   });
 
-  // Debug logging
   useEffect(() => {
     console.log("📊 Current State:", {
       trains: trains.length,
@@ -43,9 +40,6 @@ function App() {
     });
   }, [trains, history, page, performanceData]);
 
-  /* ============================
-     ⭐ CLEAR TRAIN HANDLER (FIXED)
-     ============================ */
   function handleClearTrain(trainId) {
     const train = trains.find(t => t.train_id === trainId);
     if (!train) {
@@ -63,7 +57,6 @@ function App() {
 
     console.log(`✅ Clearing train ${trainId} from junction at ${timeString}`);
 
-    // Create history record
     const historyRecord = {
       ...train,
       clearedAt: timeString,
@@ -71,21 +64,18 @@ function App() {
       status: train.status === "RESOLVED" ? "RESOLVED" : "CLEARED"
     };
 
-    // Add to history (at the beginning)
     setHistory(prev => {
       const updated = [historyRecord, ...prev];
       console.log(`📜 History updated. Total records: ${updated.length}`);
       return updated;
     });
 
-    // Remove from active trains
     setTrains(prev => {
       const updated = prev.filter(t => t.train_id !== trainId);
       console.log(`🚂 Active trains updated. Remaining: ${updated.length}`);
       return updated;
     });
 
-    // Update performance metrics
     setPerformanceData(prev => ({
       ...prev,
       totalTrainsCleared: prev.totalTrainsCleared + 1
@@ -94,27 +84,20 @@ function App() {
     console.log(`✅ Train ${trainId} cleared successfully`);
   }
 
-  /* ============================
-     ⭐ AI RESOLUTION ACCEPT (FIXED)
-     Updates train in precedence list
-     ============================ */
   function handleAcceptResolution(trainId, resolutionDetails = {}) {
     console.log(`✅ Accepting AI resolution for train ${trainId}`, resolutionDetails);
     
     const startTime = performance.now();
     
-    // ⭐ Update train with AI suggestions
     setTrains(prev =>
       prev.map(t => {
         if (t.train_id === resolutionDetails.reduced_train) {
-          // This is the train that needs to be slowed/held
           const updatedTrain = {
             ...t,
             status: "RESOLVED",
             conflict: false,
             conflict_reason: "AI resolution applied",
             max_speed: resolutionDetails.suggested_speed || t.max_speed,
-            // ⭐ Update delay if suggested
             delay: resolutionDetails.delayReduction 
               ? Math.max(0, (t.delay || 0) - resolutionDetails.delayReduction)
               : t.delay
@@ -132,7 +115,6 @@ function App() {
         }
         
         if (t.train_id === resolutionDetails.priority_train) {
-          // Mark priority train as resolved too
           return {
             ...t,
             status: "ON TIME",
@@ -147,7 +129,6 @@ function App() {
     const endTime = performance.now();
     const resolutionTime = ((endTime - startTime) / 1000).toFixed(3);
 
-    // ⭐ Update performance metrics
     setPerformanceData(prev => {
       const newResolutionCount = prev.totalConflictsResolved + 1;
       const newAverageTime = (
@@ -157,7 +138,6 @@ function App() {
 
       const delayReduction = resolutionDetails.delayReduction || 0;
       
-      // Add to resolution history
       const newResolution = {
         timestamp: new Date().toLocaleTimeString(),
         priority_train: resolutionDetails.priority_train || trainId,
@@ -180,9 +160,6 @@ function App() {
     });
   }
 
-  /* ============================
-     ⭐ AI RESOLUTION REJECT
-     ============================ */
   function handleRejectResolution(trainId) {
     console.log(`❌ Rejecting AI resolution for train ${trainId}`);
     
@@ -205,9 +182,6 @@ function App() {
     }));
   }
 
-  /* ============================
-     ⭐ UPDATE CONFLICT COUNTS
-     ============================ */
   function updateConflictCounts(conflictType, detected, resolved = 0) {
     setPerformanceData(prev => {
       const updates = { ...prev };
