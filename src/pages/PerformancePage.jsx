@@ -1,4 +1,4 @@
-// src/pages/PerformancePage.jsx (FIXED - Real-time Updates)
+// src/pages/PerformancePage.jsx (FIXED - Real Dynamic Values)
 import { useState, useEffect } from "react";
 
 export default function PerformancePage({ performanceData, history, trains }) {
@@ -10,7 +10,6 @@ export default function PerformancePage({ performanceData, history, trains }) {
     totalConflictsRejected = 0,
     averageResolutionTime = 0,
     totalTrainsCleared = 0,
-    aiAccuracyRate = 85,
     totalDelayReduced = 0,
     blockConflictsDetected = 0,
     blockConflictsResolved = 0,
@@ -20,6 +19,25 @@ export default function PerformancePage({ performanceData, history, trains }) {
     junctionConflictsResolved = 0,
     resolutionHistory = []
   } = performanceData;
+
+  // ⭐ CALCULATE REAL AI ACCURACY RATE
+  const aiAccuracyRate = totalConflictsDetected > 0
+    ? Math.round((totalConflictsResolved / totalConflictsDetected) * 100)
+    : 0;
+
+  // ⭐ CALCULATE REAL THROUGHPUT IMPROVEMENT
+  // Based on: delay saved, conflicts resolved, and train efficiency
+  const throughputImprovement = (() => {
+    if (totalConflictsResolved === 0) return 0;
+    
+    // Base improvement: 5% per conflict resolved
+    const baseImprovement = Math.min(50, totalConflictsResolved * 5);
+    
+    // Additional improvement from delay reduction: 1% per 2 minutes saved
+    const delayImprovement = Math.min(50, Math.floor(totalDelayReduced / 2));
+    
+    return Math.min(100, baseImprovement + delayImprovement);
+  })();
 
   // Calculate derived metrics
   const resolutionRate = totalConflictsDetected > 0 
@@ -126,6 +144,7 @@ export default function PerformancePage({ performanceData, history, trains }) {
             label="AI Accuracy Rate" 
             value={`${aiAccuracyRate}%`}
             valueColor="#16a34a"
+            tooltip="Based on successful resolutions vs total conflicts"
           />
           <MetricRow 
             label="Average Delay Reduction" 
@@ -145,6 +164,7 @@ export default function PerformancePage({ performanceData, history, trains }) {
             label="Overall Efficiency" 
             value={`${systemEfficiency}%`}
             valueColor="#16a34a"
+            tooltip="Conflicts resolved vs conflicts detected"
           />
           <MetricRow 
             label="Active Conflicts" 
@@ -153,8 +173,9 @@ export default function PerformancePage({ performanceData, history, trains }) {
           />
           <MetricRow 
             label="Throughput Improvement" 
-            value="+18%"
+            value={`+${throughputImprovement}%`}
             valueColor="#0284c7"
+            tooltip="Estimated based on conflicts resolved and delays saved"
           />
           <MetricRow 
             label="System Status" 
@@ -190,6 +211,44 @@ export default function PerformancePage({ performanceData, history, trains }) {
           color="#0284c7"
         />
       </div>
+
+      {/* Calculation Explanation */}
+      {(totalConflictsResolved > 0 || totalDelayReduced > 0) && (
+        <div style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          padding: "16px",
+          borderRadius: "10px",
+          marginBottom: "24px"
+        }}>
+          <h3 style={{ 
+            margin: "0 0 12px 0", 
+            fontSize: "15px",
+            color: "#1e40af",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
+          }}>
+            📐 Metric Calculations
+          </h3>
+          <div style={{ fontSize: "13px", color: "#1e40af", lineHeight: "1.8" }}>
+            <div style={{ marginBottom: "8px" }}>
+              <strong>AI Accuracy Rate:</strong> {totalConflictsResolved} resolved ÷ {totalConflictsDetected} detected = <strong>{aiAccuracyRate}%</strong>
+            </div>
+            <div style={{ marginBottom: "8px" }}>
+              <strong>Throughput Improvement:</strong> 
+              <ul style={{ margin: "4px 0 0 20px", padding: 0 }}>
+                <li>Base: {totalConflictsResolved} conflicts × 5% = {Math.min(50, totalConflictsResolved * 5)}%</li>
+                <li>Delay bonus: {totalDelayReduced} min ÷ 2 = {Math.min(50, Math.floor(totalDelayReduced / 2))}%</li>
+                <li>Total: <strong>+{throughputImprovement}%</strong> (capped at 100%)</li>
+              </ul>
+            </div>
+            <div>
+              <strong>System Efficiency:</strong> {totalConflictsResolved} resolved ÷ {totalConflictsDetected} detected = <strong>{systemEfficiency}%</strong>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent Resolutions */}
       <div style={{
@@ -228,17 +287,17 @@ export default function PerformancePage({ performanceData, history, trains }) {
         </h3>
         
         <div style={{ display: "grid", gap: "12px" }}>
-          {resolutionRate > 80 && (
+          {aiAccuracyRate >= 80 && totalConflictsResolved > 0 && (
             <InsightCard
               type="success"
-              message={`Excellent performance! ${resolutionRate}% of conflicts successfully resolved.`}
+              message={`Excellent performance! ${aiAccuracyRate}% AI accuracy rate with ${totalConflictsResolved} conflicts successfully resolved.`}
             />
           )}
           
-          {resolutionRate > 0 && resolutionRate <= 80 && (
+          {aiAccuracyRate > 0 && aiAccuracyRate < 80 && (
             <InsightCard
               type="warning"
-              message={`Resolution rate at ${resolutionRate}%. Consider reviewing conflict patterns.`}
+              message={`AI accuracy at ${aiAccuracyRate}%. Consider reviewing rejected resolutions to improve the model.`}
             />
           )}
           
@@ -252,7 +311,7 @@ export default function PerformancePage({ performanceData, history, trains }) {
           {totalDelayReduced > 0 && (
             <InsightCard
               type="info"
-              message={`System saved ${totalDelayReduced} minutes of total delay through AI interventions.`}
+              message={`System saved ${totalDelayReduced} minutes of total delay through AI interventions, improving throughput by approximately ${throughputImprovement}%.`}
             />
           )}
           
@@ -267,6 +326,13 @@ export default function PerformancePage({ performanceData, history, trains }) {
             <InsightCard
               type="info"
               message="Conflicts detected but none resolved yet. Use AI recommendations to resolve conflicts."
+            />
+          )}
+
+          {totalConflictsDetected === 0 && (
+            <InsightCard
+              type="info"
+              message="No conflicts detected yet. Upload train data with conflicting schedules to test the system."
             />
           )}
         </div>
@@ -329,7 +395,7 @@ function MetricPanel({ title, children }) {
 }
 
 // Metric Row Component
-function MetricRow({ label, value, valueColor = "#0f172a" }) {
+function MetricRow({ label, value, valueColor = "#0f172a", tooltip }) {
   return (
     <div style={{
       display: "flex",
@@ -338,7 +404,10 @@ function MetricRow({ label, value, valueColor = "#0f172a" }) {
       padding: "8px 0",
       borderBottom: "1px solid #f3f4f6"
     }}>
-      <span style={{ fontSize: "14px", color: "#64748b" }}>{label}</span>
+      <span style={{ fontSize: "14px", color: "#64748b" }} title={tooltip}>
+        {label}
+        {tooltip && <span style={{ fontSize: "11px", marginLeft: "4px" }}>ℹ️</span>}
+      </span>
       <strong style={{ fontSize: "16px", color: valueColor }}>{value}</strong>
     </div>
   );

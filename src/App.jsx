@@ -1,4 +1,4 @@
-// src/App.jsx (UPDATED - Proper Conflict Resolution Tracking)
+// src/App.jsx (COMPLETE - Fixed Conflict Tracking)
 import { useState, useEffect } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./components/Dashboard";
@@ -6,6 +6,7 @@ import Layout from "./components/Layout";
 import Conflicts from "./components/Conflicts";
 import HistoryPage from "./pages/HistoryPage";
 import PerformancePage from "./pages/PerformancePage";
+import { timeToMinutes } from "./utils/time";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -92,17 +93,33 @@ function App() {
     setTrains(prev =>
       prev.map(t => {
         if (t.train_id === resolutionDetails.reduced_train) {
+          // Calculate new arrival time based on delay
+          const originalArrival = t.arrival || timeToMinutes(t.arrival_time);
+          let newDelay = t.delay || 0;
+          
+          // Apply delay if junction conflict
+          if (resolutionDetails.suggested_delay) {
+            newDelay += resolutionDetails.suggested_delay;
+          }
+          
+          // Apply delay reduction if applicable
+          if (resolutionDetails.delayReduction) {
+            newDelay = Math.max(0, newDelay - resolutionDetails.delayReduction);
+          }
+          
+          const newArrival = originalArrival + newDelay;
+          
           const updatedTrain = {
             ...t,
             status: "RESOLVED",
             conflict: false,
             conflict_reason: `Resolved: ${resolutionDetails.decision}`,
             max_speed: resolutionDetails.suggested_speed || t.max_speed,
-            delay: resolutionDetails.delayReduction 
-              ? Math.max(0, (t.delay || 0) - resolutionDetails.delayReduction)
-              : t.delay,
+            delay: newDelay,
+            arrival: newArrival, // ⭐ UPDATE ARRIVAL TIME
             resolution_applied: resolutionDetails.decision,
-            resolution_time: new Date().toLocaleTimeString()
+            resolution_time: new Date().toLocaleTimeString(),
+            resolved_at: Date.now() // ⭐ TIMESTAMP FOR TRACKING
           };
           
           console.log(`🔄 Updated train ${t.train_id}:`, {
@@ -110,6 +127,8 @@ function App() {
             new_speed: updatedTrain.max_speed,
             old_delay: t.delay,
             new_delay: updatedTrain.delay,
+            old_arrival: originalArrival,
+            new_arrival: newArrival,
             old_status: t.status,
             new_status: updatedTrain.status,
             resolution: resolutionDetails.decision
@@ -123,7 +142,8 @@ function App() {
             ...t,
             status: "ON TIME",
             conflict: false,
-            conflict_reason: null
+            conflict_reason: null,
+            resolved_at: Date.now() // ⭐ MARK AS RESOLVED
           };
         }
         
@@ -194,23 +214,53 @@ function App() {
       
       switch(conflictType) {
         case 'block':
-          updates.blockConflictsDetected = Math.max(prev.blockConflictsDetected, detected);
-          updates.blockConflictsResolved += resolved;
+          // Only update if detected is higher (for initial detection)
+          if (detected !== undefined && detected > 0) {
+            updates.blockConflictsDetected = Math.max(prev.blockConflictsDetected, detected);
+          }
+          // Always add to resolved count
+          if (resolved > 0) {
+            updates.blockConflictsResolved = prev.blockConflictsResolved + resolved;
+          }
           break;
         case 'loop':
-          updates.loopConflictsDetected = Math.max(prev.loopConflictsDetected, detected);
-          updates.loopConflictsResolved += resolved;
+          if (detected !== undefined && detected > 0) {
+            updates.loopConflictsDetected = Math.max(prev.loopConflictsDetected, detected);
+          }
+          if (resolved > 0) {
+            updates.loopConflictsResolved = prev.loopConflictsResolved + resolved;
+          }
           break;
         case 'junction':
-          updates.junctionConflictsDetected = Math.max(prev.junctionConflictsDetected, detected);
-          updates.junctionConflictsResolved += resolved;
+          if (detected !== undefined && detected > 0) {
+            updates.junctionConflictsDetected = Math.max(prev.junctionConflictsDetected, detected);
+          }
+          if (resolved > 0) {
+            updates.junctionConflictsResolved = prev.junctionConflictsResolved + resolved;
+          }
           break;
       }
       
+      // Update total counts
       updates.totalConflictsDetected = 
         updates.blockConflictsDetected + 
         updates.loopConflictsDetected + 
         updates.junctionConflictsDetected;
+      
+      console.log("📊 Performance counts updated:", {
+        type: conflictType,
+        detected,
+        resolved,
+        newTotals: {
+          blockDetected: updates.blockConflictsDetected,
+          blockResolved: updates.blockConflictsResolved,
+          loopDetected: updates.loopConflictsDetected,
+          loopResolved: updates.loopConflictsResolved,
+          junctionDetected: updates.junctionConflictsDetected,
+          junctionResolved: updates.junctionConflictsResolved,
+          totalDetected: updates.totalConflictsDetected
+        }
+      });
       
       return updates;
     });

@@ -1,4 +1,4 @@
-// src/components/Conflicts.jsx (UPDATED - Shows Different Resolution Types)
+// src/components/Conflicts.jsx (COMPLETE - Fixed All Issues)
 import { useState, useEffect } from "react";
 import { detectBlockConflicts, getSeverityColor } from "../utils/blockConflictDetector";
 import { detectLoopLineConflicts } from "../utils/loopLineDetector";
@@ -11,13 +11,17 @@ export default function Conflicts({
   onRejectResolution,
   onUpdateConflictCounts
 }) {
-  const [aiResult, setAiResult] = useState(null);
-  const [activeConflict, setActiveConflict] = useState(null);
+  // ⭐ SEPARATE AI RESULTS FOR EACH CONFLICT TYPE
+  const [blockAiResults, setBlockAiResults] = useState({});
+  const [loopAiResults, setLoopAiResults] = useState({});
+  const [junctionAiResults, setJunctionAiResults] = useState({});
+  
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingConflictId, setLoadingConflictId] = useState(null);
   const [sameBlockConflicts, setSameBlockConflicts] = useState([]);
   const [loopLineConflicts, setLoopLineConflicts] = useState([]);
   const [junctionConflicts, setJunctionConflicts] = useState([]);
+  const [recentlyResolved, setRecentlyResolved] = useState([]);
 
   // Detect conflicts
   useEffect(() => {
@@ -51,11 +55,20 @@ export default function Conflicts({
     }
   }, [trains, onUpdateConflictCounts]);
 
-  /* AI RESOLUTION */
-  async function handleResolve(conflict) {
-    setLoading(true);
+  // Track resolved conflicts for display
+  useEffect(() => {
+    const resolved = trains.filter(t => 
+      t.status === "RESOLVED" && 
+      t.resolved_at && 
+      (Date.now() - t.resolved_at) < 300000 // Within last 5 minutes
+    );
+    setRecentlyResolved(resolved);
+  }, [trains]);
+
+  /* ⭐ AI RESOLUTION - WITH CONFLICT ID TRACKING */
+  async function handleResolve(conflict, conflictType, conflictId) {
+    setLoadingConflictId(conflictId);
     setError(null);
-    setAiResult(null);
     
     try {
       console.log("🤖 Resolving conflict with AI:", conflict);
@@ -90,18 +103,25 @@ export default function Conflicts({
         return;
       }
       
-      setAiResult(result);
-      setActiveConflict(conflict);
+      // ⭐ STORE RESULT IN APPROPRIATE STATE BASED ON TYPE
+      if (conflictType === "SAME_BLOCK") {
+        setBlockAiResults(prev => ({ ...prev, [conflictId]: result }));
+      } else if (conflictType === "LOOP_LINE") {
+        setLoopAiResults(prev => ({ ...prev, [conflictId]: result }));
+      } else if (conflictType === "JUNCTION") {
+        setJunctionAiResults(prev => ({ ...prev, [conflictId]: result }));
+      }
+      
     } catch (err) {
       console.error("AI resolution error:", err);
       setError("Failed to resolve conflict: " + err.message);
     } finally {
-      setLoading(false);
+      setLoadingConflictId(null);
     }
   }
 
-  /* ACCEPT RESOLUTION */
-  function handleAccept() {
+  /* ⭐ ACCEPT RESOLUTION - WITH PROPER CONFLICT TRACKING */
+  function handleAccept(conflictType, conflictId, aiResult) {
     if (!aiResult) {
       console.error("No AI result to accept");
       return;
@@ -120,6 +140,7 @@ export default function Conflicts({
       decision: aiResult.decision,
       confidence: aiResult.confidence,
       suggested_speed: aiResult.suggested_speed,
+      suggested_delay: aiResult.suggested_delay,
       delayReduction: delayReduction,
       reason: aiResult.reason,
       conflictType: aiResult.conflictType
@@ -129,26 +150,66 @@ export default function Conflicts({
 
     onAcceptResolution(aiResult.reduced_train, resolutionDetails);
 
-    if (onUpdateConflictCounts && activeConflict) {
-      const conflictType = activeConflict.type === 'SAME_BLOCK' ? 'block' :
-                          activeConflict.type === 'LOOP_LINE' ? 'loop' : 'junction';
-      onUpdateConflictCounts(conflictType, 0, 1);
+    // ⭐ CLEAR AI RESULT FOR THIS SPECIFIC CONFLICT
+    if (conflictType === "SAME_BLOCK") {
+      setBlockAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
+    } else if (conflictType === "LOOP_LINE") {
+      setLoopAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
+    } else if (conflictType === "JUNCTION") {
+      setJunctionAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
     }
 
-    setAiResult(null);
-    setActiveConflict(null);
+    // ⭐ UPDATE CONFLICT COUNTS IMMEDIATELY
+    if (onUpdateConflictCounts) {
+      const type = conflictType === 'SAME_BLOCK' ? 'block' :
+                   conflictType === 'LOOP_LINE' ? 'loop' : 'junction';
+      
+      // Increment resolved count by 1
+      onUpdateConflictCounts(type, 0, 1);
+    }
     
     console.log("✅ Resolution accepted and state cleared");
   }
 
-  /* REJECT RESOLUTION */
-  function handleReject() {
+  /* ⭐ REJECT RESOLUTION - WITH CLEANUP */
+  function handleReject(conflictType, conflictId, aiResult) {
     if (!aiResult) return;
 
     console.log("❌ Rejecting AI resolution for:", aiResult.reduced_train);
     onRejectResolution(aiResult.reduced_train);
-    setAiResult(null);
-    setActiveConflict(null);
+    
+    // ⭐ CLEAR AI RESULT FOR THIS SPECIFIC CONFLICT
+    if (conflictType === "SAME_BLOCK") {
+      setBlockAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
+    } else if (conflictType === "LOOP_LINE") {
+      setLoopAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
+    } else if (conflictType === "JUNCTION") {
+      setJunctionAiResults(prev => {
+        const updated = { ...prev };
+        delete updated[conflictId];
+        return updated;
+      });
+    }
   }
 
   return (
@@ -166,283 +227,6 @@ export default function Conflicts({
           color: "#b91c1c"
         }}>
           ⚠ <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* LOADING STATE */}
-      {loading && (
-        <div style={{
-          background: "#dbeafe",
-          padding: "12px",
-          borderRadius: "6px",
-          marginBottom: "16px",
-          color: "#1e40af"
-        }}>
-          🔄 Processing AI recommendation...
-        </div>
-      )}
-
-      {/* AI RESULT - DIFFERENT DISPLAY FOR EACH TYPE */}
-      {aiResult && aiResult.success && (
-        <div 
-          style={{
-            marginBottom: "24px",
-            background: "#f0fdf4",
-            border: "2px solid #4ade80",
-            padding: "16px",
-            borderRadius: "10px"
-          }}
-        >
-          <h4 style={{ 
-            marginBottom: "12px", 
-            color: "#166534",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
-          }}>
-            🤖 AI Recommendation - {aiResult.conflictType}
-            <span style={{
-              background: "#dcfce7",
-              color: "#166534",
-              padding: "2px 8px",
-              borderRadius: "12px",
-              fontSize: "12px",
-              fontWeight: "600"
-            }}>
-              {aiResult.confidence}% Confidence
-            </span>
-          </h4>
-
-          {/* SAME BLOCK CONFLICT DISPLAY */}
-          {aiResult.conflictType === "SAME_BLOCK" && (
-            <div style={{ fontSize: "14px", lineHeight: "1.8", marginBottom: "16px" }}>
-              <div style={{ 
-                background: "#fee2e2", 
-                padding: "12px", 
-                borderRadius: "6px",
-                marginBottom: "12px",
-                borderLeft: "4px solid #dc2626"
-              }}>
-                <strong>⚠️ Opposing Trains on Same Block</strong>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "8px" }}>
-                <strong>Decision:</strong>
-                <span style={{ color: "#dc2626", fontWeight: "600" }}>
-                  {aiResult.decision} (Complete Stop)
-                </span>
-
-                <strong>Priority Train:</strong>
-                <span style={{ color: "#166534", fontWeight: "600" }}>
-                  {aiResult.priority_train} (Proceeds normally)
-                </span>
-
-                <strong>Held Train:</strong>
-                <span style={{ color: "#dc2626", fontWeight: "600" }}>
-                  {aiResult.reduced_train} (STOPPED)
-                </span>
-
-                <strong>Action:</strong>
-                <span>{aiResult.detailedAction}</span>
-
-                <strong>Reason:</strong>
-                <span>{aiResult.reason}</span>
-              </div>
-            </div>
-          )}
-
-          {/* LOOP LINE CONFLICT DISPLAY */}
-          {aiResult.conflictType === "LOOP_LINE" && (
-            <div style={{ fontSize: "14px", lineHeight: "1.8", marginBottom: "16px" }}>
-              <div style={{ 
-                background: "#fef3c7", 
-                padding: "12px", 
-                borderRadius: "6px",
-                marginBottom: "12px",
-                borderLeft: "4px solid #d97706"
-              }}>
-                <strong>🔁 Same Direction - Insufficient Gap</strong>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "8px" }}>
-                <strong>Decision:</strong>
-                <span style={{ color: "#d97706", fontWeight: "600" }}>
-                  {aiResult.decision}
-                </span>
-
-                <strong>Leading Train:</strong>
-                <span style={{ color: "#166534", fontWeight: "600" }}>
-                  {aiResult.priority_train} (Continues on MAIN)
-                </span>
-
-                <strong>Following Train:</strong>
-                <span style={{ color: "#d97706", fontWeight: "600" }}>
-                  {aiResult.reduced_train} (Routed to LOOP)
-                </span>
-
-                <strong>Suggested Speed:</strong>
-                <span style={{ fontWeight: "600" }}>
-                  {aiResult.suggested_speed} km/h
-                </span>
-
-                <strong>Current Gap:</strong>
-                <span>{aiResult.timeGap} min (needs {aiResult.recommendedGap} min)</span>
-
-                <strong>Action:</strong>
-                <span>{aiResult.detailedAction}</span>
-
-                <strong>Reason:</strong>
-                <span>{aiResult.reason}</span>
-              </div>
-            </div>
-          )}
-
-          {/* JUNCTION CONFLICT DISPLAY */}
-          {aiResult.conflictType === "JUNCTION" && (
-            <div style={{ fontSize: "14px", lineHeight: "1.8", marginBottom: "16px" }}>
-              <div style={{ 
-                background: "#eff6ff", 
-                padding: "12px", 
-                borderRadius: "6px",
-                marginBottom: "12px",
-                borderLeft: "4px solid #3b82f6"
-              }}>
-                <strong>🔀 Junction Convergence - Clearance Required</strong>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "8px" }}>
-                <strong>Decision:</strong>
-                <span style={{ color: "#3b82f6", fontWeight: "600" }}>
-                  {aiResult.decision}
-                </span>
-
-                <strong>Junction:</strong>
-                <span style={{ fontWeight: "600" }}>
-                  {aiResult.junctionId}
-                </span>
-
-                <strong>Entry Sequence:</strong>
-                <div style={{ 
-                  background: "#f0f9ff", 
-                  padding: "10px", 
-                  borderRadius: "4px",
-                  marginTop: "4px"
-                }}>
-                  {aiResult.entrySequence && aiResult.entrySequence.map((seq, i) => (
-                    <div key={i} style={{ 
-                      marginBottom: i < aiResult.entrySequence.length - 1 ? "8px" : "0",
-                      paddingBottom: i < aiResult.entrySequence.length - 1 ? "8px" : "0",
-                      borderBottom: i < aiResult.entrySequence.length - 1 ? "1px solid #bfdbfe" : "none"
-                    }}>
-                      <div style={{ fontWeight: "600" }}>
-                        {i + 1}. Train {seq.train} - {seq.action}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#475569", marginTop: "2px" }}>
-                        {seq.note}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <strong>Clearance Time:</strong>
-                <span>{aiResult.clearanceRequired} minutes</span>
-
-                <strong>Current Gap:</strong>
-                <span style={{ color: aiResult.currentGap < aiResult.clearanceRequired ? "#dc2626" : "#16a34a" }}>
-                  {aiResult.currentGap.toFixed(1)} min
-                </span>
-
-                <strong>Delay Required:</strong>
-                <span style={{ fontWeight: "600", color: "#3b82f6" }}>
-                  {aiResult.suggested_delay} minutes for Train {aiResult.reduced_train}
-                </span>
-
-                <strong>Severity:</strong>
-                <span style={{
-                  padding: "2px 8px",
-                  borderRadius: "4px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  background: aiResult.severity === "CRITICAL" ? "#fee2e2" : 
-                             aiResult.severity === "HIGH" ? "#fed7aa" : "#fef3c7",
-                  color: aiResult.severity === "CRITICAL" ? "#7f1d1d" : 
-                         aiResult.severity === "HIGH" ? "#7c2d12" : "#78350f"
-                }}>
-                  {aiResult.severity}
-                </span>
-
-                <strong>Action:</strong>
-                <span>{aiResult.detailedAction}</span>
-
-                <strong>Reason:</strong>
-                <span>{aiResult.reason}</span>
-              </div>
-            </div>
-          )}
-
-          {/* COMMON PROBABILITY DATA */}
-          {aiResult.probabilities && (
-            <div style={{ 
-              display: "grid", 
-              gridTemplateColumns: "140px 1fr", 
-              gap: "8px",
-              paddingTop: "12px",
-              borderTop: "1px solid #dcfce7"
-            }}>
-              <strong>Risk Analysis:</strong>
-              <span>
-                Low: {aiResult.probabilities.low_risk}% | 
-                High: {aiResult.probabilities.high_risk}%
-              </span>
-            </div>
-          )}
-
-          {/* ACTION BUTTONS */}
-          <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
-            <button
-              onClick={handleAccept}
-              style={{
-                background: "#16a34a",
-                color: "white",
-                border: "none",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "600"
-              }}
-            >
-              ✅ Accept & Apply Resolution
-            </button>
-
-            <button
-              onClick={handleReject}
-              style={{
-                background: "#dc2626",
-                color: "white",
-                border: "none",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "600"
-              }}
-            >
-              ❌ Reject
-            </button>
-          </div>
-
-          {/* INFO MESSAGE */}
-          <div style={{
-            marginTop: "12px",
-            padding: "8px",
-            background: "#fffbeb",
-            borderRadius: "4px",
-            fontSize: "12px",
-            color: "#92400e"
-          }}>
-            ℹ️ Accepting will apply the recommended {aiResult.decision} action
-          </div>
         </div>
       )}
 
@@ -472,68 +256,86 @@ export default function Conflicts({
             ✓ No same-block conflicts detected
           </p>
         ) : (
-          sameBlockConflicts.map((conflict, i) => (
-            <div 
-              key={i} 
-              style={{
-                background: "#fef2f2",
-                border: `2px solid ${getSeverityColor(conflict.severity)}`,
-                padding: "14px",
-                borderRadius: "8px",
-                marginBottom: "12px"
-              }}
-            >
-              <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between",
-                alignItems: "start",
-                marginBottom: "8px"
-              }}>
-                <div>
-                  <div style={{ 
-                    fontSize: "12px", 
-                    fontWeight: "600",
-                    color: getSeverityColor(conflict.severity),
-                    marginBottom: "4px"
-                  }}>
-                    Block: {conflict.block_id} | Severity: {conflict.severity}
-                  </div>
-                  <div style={{ fontSize: "14px", fontWeight: "500" }}>
-                    Train A: <strong>{conflict.trainA}</strong> ↔ 
-                    Train B: <strong>{conflict.trainB}</strong>
-                  </div>
-                </div>
-                <div style={{ 
-                  background: getSeverityColor(conflict.severity),
-                  color: "white",
-                  padding: "4px 10px",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "600"
-                }}>
-                  {conflict.timeDiff} min gap
-                </div>
-              </div>
+          sameBlockConflicts.map((conflict, i) => {
+            const conflictId = `block_${i}`;
+            const aiResult = blockAiResults[conflictId];
+            const isLoading = loadingConflictId === conflictId;
 
-              <button 
-                onClick={() => handleResolve(conflict)}
-                disabled={loading}
+            return (
+              <div 
+                key={i} 
                 style={{
-                  background: loading ? "#9ca3af" : "#6366f1",
-                  color: "white",
-                  border: "none",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  opacity: loading ? 0.5 : 1
+                  background: "#fef2f2",
+                  border: `2px solid ${getSeverityColor(conflict.severity)}`,
+                  padding: "14px",
+                  borderRadius: "8px",
+                  marginBottom: "12px"
                 }}
               >
-                {loading ? "🔄 Processing..." : "🤖 Resolve with AI"}
-              </button>
-            </div>
-          ))
+                <div style={{ 
+                  display: "flex", 
+                  justifyContent: "space-between",
+                  alignItems: "start",
+                  marginBottom: "8px"
+                }}>
+                  <div>
+                    <div style={{ 
+                      fontSize: "12px", 
+                      fontWeight: "600",
+                      color: getSeverityColor(conflict.severity),
+                      marginBottom: "4px"
+                    }}>
+                      Block: {conflict.block_id} | Severity: {conflict.severity}
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: "500" }}>
+                      Train A: <strong>{conflict.trainA}</strong> ↔ 
+                      Train B: <strong>{conflict.trainB}</strong>
+                    </div>
+                  </div>
+                  <div style={{ 
+                    background: getSeverityColor(conflict.severity),
+                    color: "white",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: "600"
+                  }}>
+                    {conflict.timeDiff} min gap
+                  </div>
+                </div>
+
+                {/* ⭐ RESOLVE BUTTON (Only show if no AI result) */}
+                {!aiResult && (
+                  <button 
+                    onClick={() => handleResolve(conflict, "SAME_BLOCK", conflictId)}
+                    disabled={isLoading}
+                    style={{
+                      background: isLoading ? "#9ca3af" : "#6366f1",
+                      color: "white",
+                      border: "none",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      cursor: isLoading ? "not-allowed" : "pointer",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      opacity: isLoading ? 0.5 : 1
+                    }}
+                  >
+                    {isLoading ? "🔄 Processing..." : "🤖 Resolve with AI"}
+                  </button>
+                )}
+
+                {/* ⭐ AI RESULT (Inline with conflict) */}
+                {aiResult && aiResult.success && (
+                  <AIResultDisplay
+                    aiResult={aiResult}
+                    onAccept={() => handleAccept("SAME_BLOCK", conflictId, aiResult)}
+                    onReject={() => handleReject("SAME_BLOCK", conflictId, aiResult)}
+                  />
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -563,49 +365,65 @@ export default function Conflicts({
             ✓ No loop-line conflicts detected
           </p>
         ) : (
-          loopLineConflicts.map((conflict, i) => (
-            <div
-              key={i}
-              style={{
-                background: "#eff6ff",
-                border: "2px solid #60a5fa",
-                padding: "14px",
-                borderRadius: "8px",
-                marginBottom: "12px"
-              }}
-            >
-              <div style={{ marginBottom: "8px" }}>
-                <div style={{ fontSize: "12px", fontWeight: "600", color: "#1e40af" }}>
-                  Block: {conflict.block_id}
-                </div>
-                <div style={{ fontSize: "14px", marginTop: "4px" }}>
-                  <strong>Leading:</strong> Train {conflict.leadingTrain}
-                  <br />
-                  <strong>Following:</strong> Train {conflict.followingTrain}
-                  <br />
-                  <strong>Gap:</strong> {conflict.timeDiff} minutes
-                </div>
-              </div>
+          loopLineConflicts.map((conflict, i) => {
+            const conflictId = `loop_${i}`;
+            const aiResult = loopAiResults[conflictId];
+            const isLoading = loadingConflictId === conflictId;
 
-              <button 
-                onClick={() => handleResolve(conflict)}
-                disabled={loading}
+            return (
+              <div
+                key={i}
                 style={{
-                  background: loading ? "#9ca3af" : "#6366f1",
-                  color: "white",
-                  border: "none",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  opacity: loading ? 0.5 : 1
+                  background: "#eff6ff",
+                  border: "2px solid #60a5fa",
+                  padding: "14px",
+                  borderRadius: "8px",
+                  marginBottom: "12px"
                 }}
               >
-                {loading ? "🔄 Processing..." : "🤖 Resolve with AI"}
-              </button>
-            </div>
-          ))
+                <div style={{ marginBottom: "8px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#1e40af" }}>
+                    Block: {conflict.block_id}
+                  </div>
+                  <div style={{ fontSize: "14px", marginTop: "4px" }}>
+                    <strong>Leading:</strong> Train {conflict.leadingTrain}
+                    <br />
+                    <strong>Following:</strong> Train {conflict.followingTrain}
+                    <br />
+                    <strong>Gap:</strong> {conflict.timeDiff} minutes
+                  </div>
+                </div>
+
+                {!aiResult && (
+                  <button 
+                    onClick={() => handleResolve(conflict, "LOOP_LINE", conflictId)}
+                    disabled={isLoading}
+                    style={{
+                      background: isLoading ? "#9ca3af" : "#6366f1",
+                      color: "white",
+                      border: "none",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      cursor: isLoading ? "not-allowed" : "pointer",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      opacity: isLoading ? 0.5 : 1
+                    }}
+                  >
+                    {isLoading ? "🔄 Processing..." : "🤖 Resolve with AI"}
+                  </button>
+                )}
+
+                {aiResult && aiResult.success && (
+                  <AIResultDisplay
+                    aiResult={aiResult}
+                    onAccept={() => handleAccept("LOOP_LINE", conflictId, aiResult)}
+                    onReject={() => handleReject("LOOP_LINE", conflictId, aiResult)}
+                  />
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -635,73 +453,257 @@ export default function Conflicts({
             ✓ No junction conflicts detected
           </p>
         ) : (
-          junctionConflicts.map((conflict, i) => (
-            <div 
-              key={i} 
-              style={{
-                background: "#fef3c7",
-                border: `2px solid ${getJunctionSeverityColor(conflict.severity)}`,
-                padding: "14px",
-                borderRadius: "8px",
-                marginBottom: "12px"
-              }}
-            >
-              <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between",
-                alignItems: "start",
-                marginBottom: "8px"
-              }}>
-                <div>
-                  <div style={{ 
-                    fontSize: "12px", 
-                    fontWeight: "600",
-                    color: getJunctionSeverityColor(conflict.severity),
-                    marginBottom: "4px"
-                  }}>
-                    Junction: {conflict.junction_id} | Severity: {conflict.severity}
-                  </div>
-                  <div style={{ fontSize: "14px", fontWeight: "500" }}>
-                    Train 1: <strong>{conflict.train1}</strong> (from {conflict.route1})
-                    <br />
-                    Train 2: <strong>{conflict.train2}</strong> (from {conflict.route2})
-                  </div>
-                </div>
-                <div style={{ 
-                  background: getJunctionSeverityColor(conflict.severity),
-                  color: "white",
-                  padding: "4px 10px",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "600"
-                }}>
-                  {conflict.timeGap} min gap
-                  <div style={{ fontSize: "10px", opacity: 0.9 }}>
-                    (needs {conflict.clearanceNeeded} min)
-                  </div>
-                </div>
-              </div>
+          junctionConflicts.map((conflict, i) => {
+            const conflictId = `junction_${i}`;
+            const aiResult = junctionAiResults[conflictId];
+            const isLoading = loadingConflictId === conflictId;
 
-              <button 
-                onClick={() => handleResolve(conflict)}
-                disabled={loading}
+            return (
+              <div 
+                key={i} 
                 style={{
-                  background: loading ? "#9ca3af" : "#6366f1",
-                  color: "white",
-                  border: "none",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  opacity: loading ? 0.5 : 1
+                  background: "#fef3c7",
+                  border: `2px solid ${getJunctionSeverityColor(conflict.severity)}`,
+                  padding: "14px",
+                  borderRadius: "8px",
+                  marginBottom: "12px"
                 }}
               >
-                {loading ? "🔄 Processing..." : "🤖 Resolve with AI"}
-              </button>
-            </div>
-          ))
+                <div style={{ 
+                  display: "flex", 
+                  justifyContent: "space-between",
+                  alignItems: "start",
+                  marginBottom: "8px"
+                }}>
+                  <div>
+                    <div style={{ 
+                      fontSize: "12px", 
+                      fontWeight: "600",
+                      color: getJunctionSeverityColor(conflict.severity),
+                      marginBottom: "4px"
+                    }}>
+                      Junction: {conflict.junction_id} | Severity: {conflict.severity}
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: "500" }}>
+                      Train 1: <strong>{conflict.train1}</strong> (from {conflict.route1})
+                      <br />
+                      Train 2: <strong>{conflict.train2}</strong> (from {conflict.route2})
+                    </div>
+                  </div>
+                  <div style={{ 
+                    background: getJunctionSeverityColor(conflict.severity),
+                    color: "white",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: "600"
+                  }}>
+                    {conflict.timeGap} min gap
+                    <div style={{ fontSize: "10px", opacity: 0.9 }}>
+                      (needs {conflict.clearanceNeeded} min)
+                    </div>
+                  </div>
+                </div>
+
+                {!aiResult && (
+                  <button 
+                    onClick={() => handleResolve(conflict, "JUNCTION", conflictId)}
+                    disabled={isLoading}
+                    style={{
+                      background: isLoading ? "#9ca3af" : "#6366f1",
+                      color: "white",
+                      border: "none",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      cursor: isLoading ? "not-allowed" : "pointer",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      opacity: isLoading ? 0.5 : 1
+                    }}
+                  >
+                    {isLoading ? "🔄 Processing..." : "🤖 Resolve with AI"}
+                  </button>
+                )}
+
+                {aiResult && aiResult.success && (
+                  <AIResultDisplay
+                    aiResult={aiResult}
+                    onAccept={() => handleAccept("JUNCTION", conflictId, aiResult)}
+                    onReject={() => handleReject("JUNCTION", conflictId, aiResult)}
+                  />
+                )}
+              </div>
+            );
+          })
         )}
+      </div>
+
+      {/* RECENTLY RESOLVED CONFLICTS */}
+      {recentlyResolved.length > 0 && (
+        <div style={{ marginTop: "24px" }}>
+          <h4 style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "8px",
+            marginBottom: "12px",
+            color: "#16a34a"
+          }}>
+            ✅ Recently Resolved
+            <span style={{
+              background: "#d1fae5",
+              color: "#065f46",
+              padding: "2px 8px",
+              borderRadius: "12px",
+              fontSize: "12px",
+              fontWeight: "600"
+            }}>
+              {recentlyResolved.length}
+            </span>
+          </h4>
+
+          <div style={{
+            background: "#f0fdf4",
+            border: "1px solid #86efac",
+            padding: "12px",
+            borderRadius: "8px"
+          }}>
+            {recentlyResolved.map((train, i) => (
+              <div 
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "8px",
+                  background: "white",
+                  borderRadius: "6px",
+                  marginBottom: i < recentlyResolved.length - 1 ? "8px" : "0",
+                  border: "1px solid #bbf7d0"
+                }}
+              >
+                <div>
+                  <strong style={{ color: "#166534" }}>Train {train.train_id}</strong>
+                  <span style={{ 
+                    marginLeft: "8px", 
+                    fontSize: "13px", 
+                    color: "#16a34a" 
+                  }}>
+                    {train.resolution_applied}
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "#15803d" }}>
+                  {train.resolution_time}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: "8px",
+            fontSize: "12px",
+            color: "#16a34a",
+            fontStyle: "italic"
+          }}>
+            ℹ️ Trains will be available for re-evaluation after 5 minutes
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ⭐ AI RESULT DISPLAY COMPONENT */
+function AIResultDisplay({ aiResult, onAccept, onReject }) {
+  return (
+    <div 
+      style={{
+        marginTop: "12px",
+        background: "#f0fdf4",
+        border: "2px solid #4ade80",
+        padding: "12px",
+        borderRadius: "8px"
+      }}
+    >
+      <h4 style={{ 
+        marginBottom: "8px", 
+        color: "#166534",
+        fontSize: "14px",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px"
+      }}>
+        🤖 AI Recommendation
+        <span style={{
+          background: "#dcfce7",
+          color: "#166534",
+          padding: "2px 6px",
+          borderRadius: "8px",
+          fontSize: "11px",
+          fontWeight: "600"
+        }}>
+          {aiResult.confidence}% Confidence
+        </span>
+      </h4>
+
+      <div style={{ fontSize: "13px", lineHeight: "1.6", marginBottom: "12px", color: "#166534" }}>
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Decision:</strong> {aiResult.decision}
+        </div>
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Priority Train:</strong> {aiResult.priority_train}
+        </div>
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Affected Train:</strong> {aiResult.reduced_train}
+        </div>
+        {aiResult.suggested_speed && (
+          <div style={{ marginBottom: "4px" }}>
+            <strong>Suggested Speed:</strong> {aiResult.suggested_speed} km/h
+          </div>
+        )}
+        {aiResult.suggested_delay && (
+          <div style={{ marginBottom: "4px" }}>
+            <strong>Suggested Delay:</strong> {aiResult.suggested_delay} minutes
+          </div>
+        )}
+        <div style={{ marginTop: "8px", fontSize: "12px", fontStyle: "italic" }}>
+          {aiResult.reason}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          onClick={onAccept}
+          style={{
+            background: "#16a34a",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "13px",
+            fontWeight: "600",
+            flex: 1
+          }}
+        >
+          ✅ Accept & Apply
+        </button>
+
+        <button
+          onClick={onReject}
+          style={{
+            background: "#dc2626",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "13px",
+            fontWeight: "600",
+            flex: 1
+          }}
+        >
+          ❌ Reject
+        </button>
       </div>
     </div>
   );

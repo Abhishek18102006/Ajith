@@ -1,4 +1,4 @@
-// src/utils/aiResolver.js (UPDATED - Handles Different Conflict Types)
+// src/utils/aiResolver.js (UPDATED - Fixed Loop Line Conflict Handling)
 
 export async function resolveConflictAI(conflict) {
   try {
@@ -116,16 +116,38 @@ async function resolveSameBlockConflict(conflict) {
 async function resolveLoopLineConflict(conflict) {
   console.log("🔁 Resolving LOOP LINE conflict");
   
-  const leadingTrain = conflict.leadingTrainObj;
-  const followingTrain = conflict.followingTrainObj;
+  // ⭐ Extract train objects - check all possible field names
+  const leadingTrain = conflict.leadingTrainObj || conflict.trainAObj;
+  const followingTrain = conflict.followingTrainObj || conflict.trainBObj;
+  
+  console.log("🔍 Loop conflict data:", {
+    conflict_type: conflict.type,
+    leading_train_id: conflict.leadingTrain,
+    following_train_id: conflict.followingTrain,
+    has_leading_obj: !!leadingTrain,
+    has_following_obj: !!followingTrain,
+    leading_obj_keys: leadingTrain ? Object.keys(leadingTrain) : [],
+    following_obj_keys: followingTrain ? Object.keys(followingTrain) : []
+  });
   
   if (!leadingTrain || !followingTrain) {
+    console.error("❌ Missing train objects:", {
+      leadingTrain: leadingTrain ? leadingTrain.train_id : "MISSING",
+      followingTrain: followingTrain ? followingTrain.train_id : "MISSING",
+      conflict_keys: Object.keys(conflict),
+      conflict: conflict
+    });
     throw new Error("Missing train objects for loop line conflict");
   }
 
   // Determine priority
   const leadingPriority = Number(leadingTrain.priority) || 2;
   const followingPriority = Number(followingTrain.priority) || 2;
+  
+  console.log("📊 Priority comparison:", {
+    leading: { id: leadingTrain.train_id, priority: leadingPriority },
+    following: { id: followingTrain.train_id, priority: followingPriority }
+  });
   
   let priorityTrain, affectedTrain, decision, suggestedSpeed, reason;
 
@@ -241,7 +263,7 @@ async function resolveJunctionConflict(conflict) {
     conflictType: "JUNCTION",
     priority_train: priorityTrain,
     reduced_train: delayedTrain,
-    suggested_speed: Number(train2.max_speed) || 100, // Maintain normal speed
+    suggested_speed: Number(train2.max_speed) || 100,
     suggested_delay: Math.ceil(entryDelay),
     reason: reason,
     confidence: confidence,
